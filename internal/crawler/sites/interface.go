@@ -1,20 +1,11 @@
 package sites
 
-import "github.com/gocolly/colly/v2"
+import (
+	"context"
 
-type JobPosting struct {
-	Title       string
-	Company     string
-	Location    string
-	Salary      string
-	PostedOn    string
-	Description string
-	URL         string
-	Source      string
-	ApplyURL    string
-	Skills      []string
-	Experience  string
-}
+	"github.com/gocolly/colly/v2"
+	"github.com/vx6fid/job-crawler/pkg"
+)
 
 var knownTechnologies = []string{
 	"kafka", "kubernetes", "docker", "terraform", "ansible", "jenkins", "github actions",
@@ -31,6 +22,6 @@ var knownTechnologies = []string{
 
 type SiteParser interface {
 	Matches(url string) bool
-	Parse(e *colly.HTMLElement) ([]JobPosting, error)
-	ParseJobDescription(e *colly.HTMLElement) (JobPosting, error)
+	Parse(ctx context.Context, e *colly.HTMLElement) ([]pkg.JobPosting, error)
+	ParseJobDescription(e *colly.HTMLElement) (pkg.JobPosting, error)
 }

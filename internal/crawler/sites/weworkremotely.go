@@ -1,12 +1,16 @@
 package sites
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gocolly/colly/v2"
+	"github.com/vx6fid/job-crawler/pkg"
 )
 
 type WeWorkRemotelyParser struct{}
@@ -19,28 +23,43 @@ func (p *WeWorkRemotelyParser) Matches(url string) bool {
 	return strings.Contains(url, "weworkremotely.com")
 }
 
-func (p *WeWorkRemotelyParser) Parse(e *colly.HTMLElement) ([]JobPosting, error) {
-	var jobs []JobPosting
+func (p *WeWorkRemotelyParser) Parse(ctx context.Context, e *colly.HTMLElement) ([]pkg.JobPosting, error) {
+	log.Println("[STEP] Parse started")
 
+	var jobs []pkg.JobPosting
+	aborted := false
 	e.ForEach("li.new-listing-container.feature > a[href^='/listings/']", func(_ int, el *colly.HTMLElement) {
-		job := JobPosting{
+
+		if aborted {
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			log.Println("--- :| --- Aborting Parse() due to timeout.")
+			return // this won't break ForEach though
+		default:
+		}
+
+		job := pkg.JobPosting{
 			Title:    strings.TrimSpace(el.ChildText("h4.new-listing__header__title")),
 			Company:  strings.TrimSpace(el.ChildText("p.new-listing__company-name")),
 			Location: strings.TrimSpace(el.ChildText("p.new-listing__company-headquarters")),
 			ApplyURL: "https://weworkremotely.com" + el.Attr("href"),
 		}
-
-		fmt.Println("[weworkremotely] -> Parsed:", job.Title, "-", job.Company)
+		log.Printf("[STEP] -> [weworkremotely] Found job: %s at %s", job.Title, job.Company)
 		jobs = append(jobs, job)
 	})
-
+	log.Println("[STEP] Parse completed")
 	return jobs, nil
 }
 
-func (p *WeWorkRemotelyParser) ParseJobDescription(e *colly.HTMLElement) (JobPosting, error) {
-	job := JobPosting{
-		Title:       strings.TrimSpace(e.ChildText("h2.lis-container__header__hero__company-info__title")),
-		Company:     strings.TrimSpace(e.ChildText("div.lis-container__header__hero__company-info__description strong")),
+func (p *WeWorkRemotelyParser) ParseJobDescription(e *colly.HTMLElement) (pkg.JobPosting, error) {
+	log.Printf("[STEP] ParseJobDescription started for: %s", e.Request.URL.String())
+
+	job := pkg.JobPosting{
+		Title:       strings.ToLower(strings.TrimSpace(e.ChildText("h2.lis-container__header__hero__company-info__title"))),
+		Company:     strings.ToLower(strings.TrimSpace(e.ChildText("div.lis-container__header__hero__company-info__description strong"))),
 		URL:         e.Request.URL.String(),
 		Source:      "weworkremotely.com",
 		Description: strings.TrimSpace(e.ChildText("div.lis-container__job__content__description")),
@@ -49,11 +68,19 @@ func (p *WeWorkRemotelyParser) ParseJobDescription(e *colly.HTMLElement) (JobPos
 
 	// Required fields check
 	if job.Title == "" || job.Company == "" {
-		return JobPosting{}, fmt.Errorf("failed to parse job description: title or company missing")
+		return pkg.JobPosting{}, fmt.Errorf("failed to parse job description: title or company missing")
 	}
 
 	// PostedOn
-	job.PostedOn = strings.TrimSpace(e.ChildText("li.lis-container__job__sidebar__job-about__list__item:contains('Posted on') span"))
+	postedOnStr := strings.TrimSpace(e.ChildText("li.lis-container__job__sidebar__job-about__list__item:contains('Posted on') span"))
+	if postedOnStr != "" {
+		parsedTime, err := pkg.ParseRelativeTime(postedOnStr)
+		if err == nil {
+			job.PostedOn = parsedTime
+		} else {
+			job.PostedOn = time.Now() // or handle error/log as needed
+		}
+	}
 
 	// Salary
 	job.Salary = strings.TrimSpace(e.ChildText("li.lis-container__job__sidebar__job-about__list__item:contains('Salary') span"))
@@ -87,13 +114,14 @@ func (p *WeWorkRemotelyParser) ParseJobDescription(e *colly.HTMLElement) (JobPos
 
 	// Deduplicate and sort skills
 	for skill := range skillsSet {
-		job.Skills = append(job.Skills, skill)
+		job.Skills = append(job.Skills, strings.ToLower(skill))
 	}
 	sort.Strings(job.Skills)
 
 	// Extract experience from description
 	job.Experience = extractExperience(job.Description)
 
+	log.Printf("[STEP] -> [weworkremotely] Parsed job: %s at %s", job.Title, job.Company)
 	return job, nil
 }
 
