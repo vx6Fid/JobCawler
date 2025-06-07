@@ -12,7 +12,7 @@ import (
 func TrendReportHandler(w http.ResponseWriter, r *http.Request) {
 	role := strings.TrimSpace(r.URL.Query().Get("role"))
 
-	if role == "" || !crawler.IsRoleAllowed(role) {
+	if !crawler.IsRoleAllowed(role) {
 		http.Error(w, "Invalid or unsupported role", http.StatusBadRequest)
 		return
 	}

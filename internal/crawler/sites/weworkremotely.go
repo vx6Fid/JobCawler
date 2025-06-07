@@ -27,18 +27,13 @@ func (p *WeWorkRemotelyParser) Parse(ctx context.Context, e *colly.HTMLElement) 
 	log.Println("[STEP] Parse started")
 
 	var jobs []pkg.JobPosting
-	aborted := false
 	e.ForEach("li.new-listing-container.feature > a[href^='/listings/']", func(_ int, el *colly.HTMLElement) {
-
-		if aborted {
-			return
-		}
-
 		select {
 		case <-ctx.Done():
-			log.Println("--- :| --- Aborting Parse() due to timeout.")
-			return // this won't break ForEach though
+			log.Println("--- :| --- Skipping job in Parse() due to timeout.")
+			return // this returns from current iteration, not ForEach
 		default:
+			// continue
 		}
 
 		job := pkg.JobPosting{
@@ -50,6 +45,7 @@ func (p *WeWorkRemotelyParser) Parse(ctx context.Context, e *colly.HTMLElement) 
 		log.Printf("[STEP] -> [weworkremotely] Found job: %s at %s", job.Title, job.Company)
 		jobs = append(jobs, job)
 	})
+
 	log.Println("[STEP] Parse completed")
 	return jobs, nil
 }

@@ -21,7 +21,10 @@ func main() {
 	}
 
 	routes.RegisterRoutes()
-
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("api_server/static"))))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "api_server/templates/index.html")
+	})
 	log.Println("[api] API server running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

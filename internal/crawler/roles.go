@@ -7,6 +7,7 @@ func IsRoleAllowed(role string) bool {
 }
 
 var AllowedRoles = map[string]bool{
+	"":                                true, // Allow empty role for general queries
 	"backend":                         true,
 	"developer":                       true,
 	"engineer":                        true,

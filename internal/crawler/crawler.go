@@ -15,9 +15,6 @@ import (
 )
 
 func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
 	if err := pkg.ConnectMongo(); err != nil {
 		return fmt.Errorf("MongoDB connection failed: %v", err)
 	}
@@ -31,7 +28,7 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 	for _, role := range roles {
 		if !IsRoleAllowed(role) {
 			log.Printf("--- [ERROR] --- Role not allowed: %s", role)
-			continue // skip invalid
+			continue
 		}
 		searchURL := fmt.Sprintf("https://weworkremotely.com/remote-jobs/search?term=%s", url.QueryEscape(role))
 		frontier.Add(urlfrontier.CrawlTask{
@@ -43,16 +40,13 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 	tick := time.NewTicker(5 * time.Second)
 	defer tick.Stop()
 
+	perTaskTimeout := 10 * time.Second // Timeout for each individual task
+
 	for frontier.QueueSize() > 0 {
 		select {
-		case <-ctx.Done():
-			log.Println("--- [STOP] --- Context timeout reached.")
-			log.Printf("Crawler finished early. Total jobs saved: %d | Duration: %.2fs", jobCounter, time.Since(start).Seconds())
-			return nil
 		case <-tick.C:
 			log.Printf("[DEBUG] Queue Size: %d, Job Count: %d", frontier.QueueSize(), jobCounter)
 		default:
-			// continue loop
 		}
 
 		if jobCounter >= maxJobs {
@@ -63,17 +57,19 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 		task := frontier.GetNext()
 		log.Printf("Crawling: %s [%s]", task.URL, task.Type)
 
+		// Create short-lived context for this specific task
+		ctx, cancel := context.WithTimeout(context.Background(), perTaskTimeout)
+
 		parser := sites.GetParser(task.URL)
 		if parser == nil {
 			log.Printf("--- [ERROR] --- No parser for URL: %s", task.URL)
+			cancel()
 			continue
 		}
 
-		log.Printf("[STEP] Starting fetch: %s", task.URL)
 		switch task.Type {
 		case "listing":
 			err := d.FetchWithParser(ctx, task.URL, func(e *colly.HTMLElement) {
-				log.Printf("[STEP] Entered listing handler for: %s", task.URL)
 				jobs, err := parser.Parse(ctx, e)
 				if err != nil {
 					log.Printf("--- [ERROR] --- Parser error: %v", err)
@@ -92,13 +88,9 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 			})
 			if err != nil {
 				log.Printf("--- [ERROR] --- Fetch error: %v", err)
-			} else {
-				log.Printf("[STEP] List fetch completed: %s", task.URL)
 			}
-
 		case "job":
 			err := d.FetchWithParser(ctx, task.URL, func(e *colly.HTMLElement) {
-				log.Printf("[STEP] Entered job handler for: %s", task.URL)
 				job, err := parser.ParseJobDescription(e)
 				if err != nil {
 					log.Printf("--- [ERROR] --- Job parser error: %v", err)
@@ -113,10 +105,11 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 			})
 			if err != nil {
 				log.Printf("--- [ERROR] --- Fetch error: %v", err)
-			} else {
-				log.Printf("[STEP] Job fetch completed: %s", task.URL)
 			}
 		}
+
+		// Cancel context immediately after task to avoid leaks
+		cancel()
 	}
 
 	log.Printf("Crawler finished. Total jobs saved: %d | Duration: %.2fs", jobCounter, time.Since(start).Seconds())
