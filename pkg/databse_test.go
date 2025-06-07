@@ -1,12 +1,26 @@
 package pkg
 
 import (
+	"log"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 func TestUpsertJob(t *testing.T) {
-	err := ConnectMongo()
+	/* Debugging: Print current working directory
+	dir, _ := os.Getwd()
+	log.Println("Current working directory:", dir)
+	*/
+
+	err := godotenv.Load(filepath.Join("..", ".env"))
+	if err != nil {
+		log.Println("Could not load .env file for test:", err)
+	}
+
+	err = ConnectMongo()
 	if err != nil {
 		t.Fatalf("MongoDB connection failed: %v", err)
 	}

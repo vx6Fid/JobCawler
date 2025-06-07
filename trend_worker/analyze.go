@@ -2,6 +2,8 @@ package trend_worker
 
 import (
 	"context"
+	"log"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -68,7 +70,12 @@ func getMongoCollection() (*mongo.Collection, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	clientOptions := options.Client().ApplyURI("mongodb+srv://achal:dbpass@cluster0.ywqgo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+	database_url := os.Getenv("DATABASE_URL")
+	if database_url == "" {
+		log.Fatal("DATABASE_URL not set in .env file")
+	}
+
+	clientOptions := options.Client().ApplyURI(database_url)
 	client, err := mongo.Connect(clientOptions)
 	if err != nil {
 		return nil, err
