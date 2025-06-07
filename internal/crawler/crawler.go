@@ -24,7 +24,6 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 
 	start := time.Now()
 	jobCounter := 0
-	deadline := time.Now().Add(timeout)
 
 	frontier := urlfrontier.NewFrontier(100)
 	d := downloader.NewDownloader()
@@ -41,10 +40,19 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 		})
 	}
 
+	tick := time.NewTicker(5 * time.Second)
+	defer tick.Stop()
+
 	for frontier.QueueSize() > 0 {
-		if time.Now().After(deadline) {
-			log.Println("--- :| --- Timeout reached. Stopping crawl.")
-			break
+		select {
+		case <-ctx.Done():
+			log.Println("--- [STOP] --- Context timeout reached.")
+			log.Printf("Crawler finished early. Total jobs saved: %d | Duration: %.2fs", jobCounter, time.Since(start).Seconds())
+			return nil
+		case <-tick.C:
+			log.Printf("[DEBUG] Queue Size: %d, Job Count: %d", frontier.QueueSize(), jobCounter)
+		default:
+			// continue loop
 		}
 
 		if jobCounter >= maxJobs {
@@ -64,7 +72,7 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 		log.Printf("[STEP] Starting fetch: %s", task.URL)
 		switch task.Type {
 		case "listing":
-			err := d.FetchWithParser(task.URL, func(e *colly.HTMLElement) {
+			err := d.FetchWithParser(ctx, task.URL, func(e *colly.HTMLElement) {
 				log.Printf("[STEP] Entered listing handler for: %s", task.URL)
 				jobs, err := parser.Parse(ctx, e)
 				if err != nil {
@@ -89,7 +97,7 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 			}
 
 		case "job":
-			err := d.FetchWithParser(task.URL, func(e *colly.HTMLElement) {
+			err := d.FetchWithParser(ctx, task.URL, func(e *colly.HTMLElement) {
 				log.Printf("[STEP] Entered job handler for: %s", task.URL)
 				job, err := parser.ParseJobDescription(e)
 				if err != nil {
