@@ -15,6 +15,8 @@ import (
 )
 
 func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
+
+	// Initialization Section
 	if err := pkg.ConnectMongo(); err != nil {
 		return fmt.Errorf("MongoDB connection failed: %v", err)
 	}
@@ -25,6 +27,7 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 	frontier := urlfrontier.NewFrontier(100)
 	d := downloader.NewDownloader()
 
+	// Role Validation and Search URL Construction Section
 	for _, role := range roles {
 		if !IsRoleAllowed(role) {
 			log.Printf("--- [ERROR] --- Role not allowed: %s", role)
@@ -37,12 +40,14 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 		})
 	}
 
-	tick := time.NewTicker(5 * time.Second)
+	tick := time.NewTicker(5 * time.Second) // Fires every 5 seconds to log progress
 	defer tick.Stop()
 
-	perTaskTimeout := 10 * time.Second // Timeout for each individual task
+	perTaskTimeout := 15 * time.Second // Timeout for each individual task
 
+	// Main Crawling Loop Section
 	for frontier.QueueSize() > 0 {
+		// Non-blocking progress logging, if tick has fired then log else continue
 		select {
 		case <-tick.C:
 			log.Printf("[DEBUG] Queue Size: %d, Job Count: %d", frontier.QueueSize(), jobCounter)
@@ -70,7 +75,7 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 		switch task.Type {
 		case "listing":
 			err := d.FetchWithParser(ctx, task.URL, func(e *colly.HTMLElement) {
-				jobs, err := parser.Parse(ctx, e)
+				jobs, err := parser.Parse(ctx, e) // Parse the job listings
 				if err != nil {
 					log.Printf("--- [ERROR] --- Parser error: %v", err)
 					return
@@ -91,7 +96,7 @@ func StartCrawling(roles []string, maxJobs int, timeout time.Duration) error {
 			}
 		case "job":
 			err := d.FetchWithParser(ctx, task.URL, func(e *colly.HTMLElement) {
-				job, err := parser.ParseJobDescription(e)
+				job, err := parser.ParseJobDescription(e) // Parse the job description
 				if err != nil {
 					log.Printf("--- [ERROR] --- Job parser error: %v", err)
 					return

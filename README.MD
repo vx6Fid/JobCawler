@@ -1,43 +1,148 @@
-# Remote Job Scraper
+# Job Market Trend Analyzer
+A scalable, backend-first system that scrapes real job listings, analyzes hiring trends, and serves insights through a fast API and a clean frontend. Built in Go, without unnecessary dependencies.
 
-A powerful and extensible web scraper built in Go using the Colly framework to collect remote job listings from [WeWorkRemotely](https://weworkremotely.com/).
+## What It Does
+* Scrapes job data from [We Work Remotely](https://weworkremotely.com)
+* Analyzes trends across:
+  * Most in-demand skills
+  * Frequently mentioned locations
+  * Hiring companies
+  * Experience level distribution
+* Deduplicates and stores listings in MongoDB
+* Cleans up stale listings automatically (TTL)
+* Offers a simple frontend to trigger crawls and view trends
+* Background crawling with async updates — no page reloads
+
+## Why I Built It
+I wanted to understand how hiring patterns shift across roles — and use that as an excuse to build something real.
+This wasn’t about making another CRUD app. I wanted concurrency, background processing, crawling architecture, and live data flowing through a pipeline I built end-to-end.
 
 ## Tech Stack
-- **Go (Golang)**
-- **Colly** – Fast and elegant scraping framework for Go
-- **HTML Parsing** – Custom selectors to handle dynamic job page structures
 
-## Features
-- Extracts structured job data: `Title`, `Company`, `Location`, `Salary`, `Skills`, `Description`, `Posted Date`, `Apply URL`
-- Skill detection via keyword matching (future-ready for NLP-based tech stack detection)
-- Graceful error handling for missing or malformed data
-- Modular design for easy expansion to other platforms or data pipelines
+| Component   | Tool                        |
+| ----------- | --------------------------- |
+| Language    | Go (1.22)                   |
+| Scraper     | Colly                       |
+| Database    | MongoDB (Atlas)             |
+| Trend Logic | Mongo Aggregation Pipelines |
+| API Server  | `net/http`                  |
+| Frontend    | Vanilla JS + HTML/CSS       |
+| Infra       | Go Modules, `.env` config   |
 
-## Data Model
-```go
-type JobPosting struct {
-  Title       string
-  Company     string
-  Location    string
-  Salary      string
-  PostedOn    string
-  Description string
-  URL         string
-  Source      string
-  ApplyURL    string
-  Skills      []string
-  Experience  string
-}
+## Architecture & Diagrams
+
+### Internal Flowchart – `crawler.go`
+
+![System Flow Diagram](./images/flowchart.png)
+
+### Sequence Diagram
+
+![Sequence Diagram](./images/sequence_diagram.png)
+
+- `/api/crawl?role=X` triggers `StartCrawling` in background
+- `StartCrawling` spawns async workers for downloading jobs
+- Deduplicated results are written to MongoDB
+
+
+### High-Level Architecture
+This is a clutter-free view of how components are organized logically and physically:
+
+![High-Level Architecture](./images/high-level_architecture.png)
+
+- **Frontend:** Basic HTML/CSS/JS served via Go’s static file server
+- **API Server:** Uses `net/http` with role validation and background job handling
+- **Job Crawler:** Modular, Colly-based crawlers per role
+- **Trend Worker:** Aggregates skill/location trends using Mongo pipelines
+- **MongoDB Atlas:** Stores job documents with TTL index
+
+Each part is modular, extensible, and communicates clearly with its neighbors.
+
+
+### Folder Structure
+```
+Job-Crawler
+├── api_server           # API server and static frontend
+│   ├── handlers         # API endpoint logic
+│   ├── routes           # HTTP route mapping
+│   ├── static           # Frontend JS + CSS
+│   └── templates        # HTML views
+├── internal             # Core crawling logic
+│   ├── crawler          # Job scrapers and role logic
+│   │   └── sites        # Site-specific parsers
+│   ├── downloader       # HTTP client with timeout/cancel
+│   └── urlfrontier      # Deduplicated job queue
+├── pkg                  # MongoDB, models, shared utils
+├── trend_worker         # Aggregation logic for trends
+├── images               # Diagrams and screenshots
 ```
 
-## Future Improvements
-- Integrate NLP for more accurate tech stack detection
-- Add support for multiple job boards
-- Export options: JSON, CSV, database storage
 
-## 🚧 This README Needs Therapy
-Yeah, yeah — I know. This README is more of a placeholder than a guide right now. 
+### API Endpoints
 
-But don’t worry, it’ll get a **glow-up**... eventually. Once the project is done cooking, the README will stop looking like it was written at 2 AM on caffeine and existential dread 🫠.
+```http
+GET /api/crawl?role=backend&role=ml
+  → Starts background crawl for given roles
 
-> Stay tuned — future-me will make it beautiful. Probably.
+GET /api/trends?role=frontend
+  → Returns trend report for a role
+```
+
+Crawls run in the background. The UI automatically refreshes results once done.
+
+## How to Run
+
+### Prerequisites
+
+* Go 1.22+
+* MongoDB Atlas URI
+
+Create a `.env` file:
+
+```
+DATABASE_URL=mongodb+srv://<your-connection-string>
+```
+
+### Start the server:
+
+```bash
+go run api_server/main.go
+```
+
+Then open [http://localhost:8080](http://localhost:8080) in your browser.
+
+
+## UI Preview
+
+![Screenshot](./images/Job%20Trend%20Analyzer.png)
+
+* Select a role (e.g., “Backend Developer”)
+* Click “Analyze Now”
+* A countdown shows scraping progress
+* Trends appear when ready — no reloads
+
+
+## Highlights
+
+* Clean separation between crawling, storage, and analytics
+* MongoDB TTL cleans up stale job listings after 30 days
+* Background workers use context for timeout + cancellation
+* Role validation to prevent junk API calls
+* Trend analytics are fast, computed via aggregation pipelines
+* No frontend framework — just async JS and minimal UI
+
+
+## What I Learned
+
+* Designing resilient crawlers with proper error handling
+* Handling concurrency and graceful cancellation in Go
+* Coordinating async jobs with the frontend
+* Working with MongoDB's aggregation framework and TTL indexes
+* Building something that actually solves a problem
+
+
+## Author
+
+**Achal** — backend-leaning engineer with an interest in systems that scale and data that tells a story.
+
+GitHub: [@vx6fid](https://github.com/vx6fid)
+X/Twitter: [@vx6fid](https://x.com/vx6fid)
