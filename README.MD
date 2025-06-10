@@ -10,7 +10,7 @@ A scalable, backend-first system that scrapes real job listings, analyzes hiring
   * Experience level distribution
 * Deduplicates and stores listings in MongoDB
 * Cleans up stale listings automatically (TTL)
-* Offers a simple frontend to trigger crawls and view trends
+* Offers a minimal frontend to trigger crawls and view trends
 * Background crawling with async updates — no page reloads
 
 ## Why I Built It
